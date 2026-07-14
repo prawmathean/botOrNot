@@ -11,15 +11,16 @@
   <div class="page">
     <div class="container" style="max-width:480px">
       <div class="text-center" style="margin-bottom:2rem">
-        <div class="site-title">🤖 Bot or Not?</div>
+        <div class="site-title">Bot or Not</div>
         <p class="subtitle">Can you tell AI from reality?</p>
       </div>
 
-      <div class="card">
+      <!-- Step 1: Enter name -->
+      <div id="step-name" class="card">
         <h2>Join the game</h2>
         <form id="login-form" autocomplete="off">
           <div class="form-group">
-            <label for="username">Your name</label>
+            <label for="username">Your name / team name</label>
             <input
               id="username"
               type="text"
@@ -29,69 +30,106 @@
               required
             >
           </div>
-          <button id="start-btn" type="submit" class="btn btn-primary btn-full btn-lg">
-            Start Game
+          <button id="next-btn" type="submit" class="btn btn-primary btn-full btn-lg">
+            Continue
           </button>
         </form>
-        <div id="msg" class="msg msg-error"></div>
+        <div id="name-msg" class="msg msg-error"></div>
       </div>
 
-      <p class="muted text-center">
-        You'll be shown images — guess if each one is
-        <strong>AI-generated</strong> or <strong>real</strong>.
+      <!-- Step 2: Confirm before starting -->
+      <div id="step-confirm" class="card" style="display:none">
+        <h2>Ready to play?</h2>
+        <p>You're joining as:</p>
+        <p style="font-size:1.4rem; font-weight:700; margin-bottom:1.25rem" id="confirm-name"></p>
+        <p class="muted" style="margin-bottom:1.5rem">
+          Once you start, a timer begins. You cannot pause. Make sure you're ready.
+        </p>
+        <div style="display:flex; gap:0.75rem">
+          <button id="back-btn" class="btn btn-secondary" style="flex:1">Back</button>
+          <button id="start-btn" class="btn btn-primary" style="flex:2">Yes, start the game</button>
+        </div>
+        <div id="start-msg" class="msg msg-error"></div>
+      </div>
+
+      <p class="muted text-center mt-1">
+        Each correct guess earns you points. You have a time limit.
       </p>
     </div>
   </div>
 
   <script>
-    const form    = document.getElementById('login-form');
-    const input   = document.getElementById('username');
-    const btn     = document.getElementById('start-btn');
-    const msg     = document.getElementById('msg');
+    const form        = document.getElementById('login-form');
+    const stepName    = document.getElementById('step-name');
+    const stepConfirm = document.getElementById('step-confirm');
+    const confirmName = document.getElementById('confirm-name');
+    const nameMsg     = document.getElementById('name-msg');
+    const startMsg    = document.getElementById('start-msg');
+    const startBtn    = document.getElementById('start-btn');
+    const backBtn     = document.getElementById('back-btn');
+    const usernameEl  = document.getElementById('username');
 
-    function showError(text) {
-      msg.textContent = text;
-      msg.className   = 'msg msg-error visible';
-    }
+    let pendingUsername = '';
 
-    form.addEventListener('submit', async (e) => {
+    // Step 1: validate name and show confirmation
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const username = input.value.trim();
-      if (!username) { showError('Please enter your name.'); return; }
+      const val = usernameEl.value.trim();
+      if (!val) {
+        nameMsg.textContent = 'Please enter your name.';
+        nameMsg.className   = 'msg msg-error visible';
+        return;
+      }
+      nameMsg.className   = 'msg';
+      pendingUsername      = val;
+      confirmName.textContent = val;
+      stepName.style.display    = 'none';
+      stepConfirm.style.display = '';
+    });
 
-      btn.disabled    = true;
-      btn.textContent = 'Starting…';
-      msg.className   = 'msg';
+    // Step 2: back
+    backBtn.addEventListener('click', () => {
+      stepConfirm.style.display = 'none';
+      stepName.style.display    = '';
+      startMsg.className        = 'msg';
+    });
+
+    // Step 2: confirmed — actually log in
+    startBtn.addEventListener('click', async () => {
+      startBtn.disabled    = true;
+      startBtn.textContent = 'Starting...';
+      startMsg.className   = 'msg';
 
       try {
         const res  = await fetch('/api/login', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ username }),
+          body:    JSON.stringify({ username: pendingUsername }),
         });
         const data = await res.json();
 
         if (!res.ok) {
-          showError(data.error || 'Login failed. Try again.');
-          btn.disabled    = false;
-          btn.textContent = 'Start Game';
+          startMsg.textContent = data.error || 'Login failed. Try again.';
+          startMsg.className   = 'msg msg-error visible';
+          startBtn.disabled    = false;
+          startBtn.textContent = 'Yes, start the game';
           return;
         }
 
-        // Store session info for the game page
         sessionStorage.setItem('bon_username', data.username);
         sessionStorage.setItem('bon_endTime',  data.endTime);
         sessionStorage.setItem('bon_duration', data.sessionDurationMinutes);
 
         window.location.href = '/game.html';
-      } catch (err) {
-        showError('Could not connect to server. Check your connection.');
-        btn.disabled    = false;
-        btn.textContent = 'Start Game';
+      } catch {
+        startMsg.textContent = 'Could not connect to server. Check your connection.';
+        startMsg.className   = 'msg msg-error visible';
+        startBtn.disabled    = false;
+        startBtn.textContent = 'Yes, start the game';
       }
     });
 
-    input.focus();
+    usernameEl.focus();
   </script>
 </body>
 </html>

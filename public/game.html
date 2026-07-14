@@ -14,19 +14,35 @@
       <div class="game-header">
         <div>
           <span id="username-display" class="muted"></span>
+          &nbsp;
+          <button id="quit-btn" class="btn btn-secondary" style="font-size:0.8rem; padding:0.3rem 0.75rem;">Quit</button>
         </div>
         <div id="timer" class="timer">--:--</div>
-        <div id="score-display" class="score-display">0 / 0</div>
+        <div id="score-display" class="score-display">0 pts</div>
+      </div>
+
+      <!-- Quit confirmation overlay -->
+      <div id="quit-confirm" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:none; align-items:center; justify-content:center;">
+        <div class="card" style="max-width:360px; width:90%; margin:0;">
+          <h2 style="margin-bottom:0.75rem">Quit the game?</h2>
+          <p class="muted" style="margin-bottom:1.5rem">
+            Your current score will be saved to the leaderboard, but your session will end.
+          </p>
+          <div style="display:flex; gap:0.75rem">
+            <button id="quit-cancel" class="btn btn-secondary" style="flex:1">Keep playing</button>
+            <button id="quit-confirm-btn" class="btn btn-primary" style="flex:1">Yes, quit</button>
+          </div>
+        </div>
       </div>
 
       <div class="card" style="padding:1rem">
         <div class="image-wrap" id="image-wrap">
-          <span class="image-placeholder">Loading image…</span>
+          <span class="image-placeholder">Loading image...</span>
         </div>
 
         <div class="answer-buttons">
-          <button id="btn-bot" class="btn btn-bot" disabled>🤖 Bot</button>
-          <button id="btn-not" class="btn btn-not" disabled>📷 Not</button>
+          <button id="btn-bot" class="btn btn-bot" disabled>Bot</button>
+          <button id="btn-not" class="btn btn-not" disabled>Not</button>
         </div>
 
         <div id="feedback" class="feedback"></div>
@@ -41,21 +57,25 @@
     let username    = sessionStorage.getItem('bon_username');
     let endTime     = new Date(sessionStorage.getItem('bon_endTime')).getTime();
     let currentId   = null;
-    let imageStart  = null;  // when the current image was displayed (for responseTimeMs)
+    let imageStart  = null;
     let totalAnswered = 0;
     let totalCorrect  = 0;
+    let totalPoints   = 0;
     let timerInterval = null;
-    let locked        = false; // prevent double-clicks
+    let locked        = false;
     let sessionEnded  = false;
 
-    const btnBot       = document.getElementById('btn-bot');
-    const btnNot       = document.getElementById('btn-not');
-    const imageWrap    = document.getElementById('image-wrap');
-    const feedback     = document.getElementById('feedback');
-    const timerEl      = document.getElementById('timer');
-    const scoreEl      = document.getElementById('score-display');
-    const statusMsg    = document.getElementById('status-msg');
-    const userDisplay  = document.getElementById('username-display');
+    const POINTS_PER_CORRECT = 10; // must match server
+
+    const btnBot      = document.getElementById('btn-bot');
+    const btnNot      = document.getElementById('btn-not');
+    const imageWrap   = document.getElementById('image-wrap');
+    const feedback    = document.getElementById('feedback');
+    const timerEl     = document.getElementById('timer');
+    const scoreEl     = document.getElementById('score-display');
+    const statusMsg   = document.getElementById('status-msg');
+    const userDisplay = document.getElementById('username-display');
+    const quitOverlay = document.getElementById('quit-confirm');
 
     // ── Init ──────────────────────────────────────────────────────
     if (!username || !endTime) {
@@ -63,7 +83,7 @@
     } else {
       userDisplay.textContent = username;
       startTimer();
-      syncServerTime();          // correct for clock drift on load
+      syncServerTime();
       loadNextImage();
     }
 
@@ -89,28 +109,42 @@
       else timerEl.classList.remove('warning');
     }
 
-    // Sync server time periodically to avoid client clock drift
     async function syncServerTime() {
       try {
         const res  = await fetch('/api/session-status', { credentials: 'include' });
         if (!res.ok) { endSession('Session not found.'); return; }
         const data = await res.json();
         if (!data.active) { endSession('Your session has ended.'); return; }
-        // Trust server's remainingMs — adjust our local endTime reference
         endTime = Date.now() + data.remainingMs;
         sessionStorage.setItem('bon_endTime', new Date(endTime).toISOString());
-      } catch { /* ignore network errors during sync */ }
+      } catch { /* ignore */ }
     }
+
+    // ── Quit ──────────────────────────────────────────────────────
+    document.getElementById('quit-btn').addEventListener('click', () => {
+      quitOverlay.style.display = 'flex';
+    });
+
+    document.getElementById('quit-cancel').addEventListener('click', () => {
+      quitOverlay.style.display = 'none';
+    });
+
+    document.getElementById('quit-confirm-btn').addEventListener('click', async () => {
+      quitOverlay.style.display = 'none';
+      try {
+        await fetch('/api/quit', { method: 'POST', credentials: 'include' });
+      } catch { /* best effort */ }
+      endSession('You quit the game.');
+    });
 
     // ── Image Loading ─────────────────────────────────────────────
     async function loadNextImage() {
       if (sessionEnded) return;
-      setButtons(false); // disable while loading
+      setButtons(false);
       feedback.textContent = '';
       feedback.className   = 'feedback';
       statusMsg.textContent = '';
 
-      // Sync every ~5 images
       if ((totalAnswered % 5) === 0 && totalAnswered > 0) {
         syncServerTime();
       }
@@ -124,18 +158,16 @@
           return;
         }
 
-        currentId  = data.imageId;
+        currentId = data.imageId;
         showImage(data.imageUrl);
       } catch {
-        statusMsg.textContent = 'Network error — retrying in 2s…';
+        statusMsg.textContent = 'Network error — retrying in 2s...';
         setTimeout(loadNextImage, 2000);
       }
     }
 
     function showImage(url) {
-      // Use a new Image() so we enable the browser's cache (ETag/Cache-Control from server).
-      // If the same image ID is served again (pool repeat), the browser serves it from cache.
-      imageWrap.innerHTML = '<span class="image-placeholder">Loading…</span>';
+      imageWrap.innerHTML = '<span class="image-placeholder">Loading...</span>';
       const img = new Image();
       img.className = 'game-img';
       img.alt       = 'Guess: bot or not?';
@@ -147,7 +179,7 @@
       };
       img.onerror = () => {
         imageWrap.innerHTML = '<span class="image-placeholder">Image failed to load</span>';
-        setButtons(true); // let them skip
+        setButtons(true);
         imageStart = Date.now();
       };
       img.src = url;
@@ -174,23 +206,24 @@
         const data = await res.json();
 
         totalAnswered++;
-        if (data.correct) totalCorrect++;
-        scoreEl.textContent = `${totalCorrect} / ${totalAnswered}`;
-
-        // Brief feedback flash
         if (data.correct) {
-          feedback.textContent = `✓ Correct! It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
+          totalCorrect++;
+          totalPoints += POINTS_PER_CORRECT;
+        }
+        scoreEl.textContent = `${totalPoints} pts`;
+
+        if (data.correct) {
+          feedback.textContent = `Correct! It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
           feedback.className   = 'feedback correct';
         } else {
-          feedback.textContent = `✗ Wrong. It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
+          feedback.textContent = `Wrong. It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
           feedback.className   = 'feedback wrong';
         }
 
-        // Store running totals for results page
         sessionStorage.setItem('bon_total',   totalAnswered);
         sessionStorage.setItem('bon_correct', totalCorrect);
+        sessionStorage.setItem('bon_points',  totalPoints);
 
-        // Small delay so feedback is visible, then load next
         setTimeout(() => {
           locked = false;
           loadNextImage();
@@ -218,7 +251,7 @@
       sessionEnded = true;
       clearInterval(timerInterval);
       setButtons(false);
-      statusMsg.textContent = reason + ' Redirecting to results…';
+      statusMsg.textContent = reason + ' Redirecting to results...';
       setTimeout(() => { window.location.href = '/results.html'; }, 1500);
     }
   </script>
