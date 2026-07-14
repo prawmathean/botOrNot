@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot or Not — Login</title>
+  <meta name="description" content="Can you tell AI-generated images from real ones? Enter your name to start.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page">
+    <div class="container" style="max-width:480px">
+      <div class="text-center" style="margin-bottom:2rem">
+        <div class="site-title">🤖 Bot or Not?</div>
+        <p class="subtitle">Can you tell AI from reality?</p>
+      </div>
+
+      <div class="card">
+        <h2>Join the game</h2>
+        <form id="login-form" autocomplete="off">
+          <div class="form-group">
+            <label for="username">Your name</label>
+            <input
+              id="username"
+              type="text"
+              placeholder="e.g. Prajwal"
+              maxlength="32"
+              autocomplete="off"
+              required
+            >
+          </div>
+          <button id="start-btn" type="submit" class="btn btn-primary btn-full btn-lg">
+            Start Game
+          </button>
+        </form>
+        <div id="msg" class="msg msg-error"></div>
+      </div>
+
+      <p class="muted text-center">
+        You'll be shown images — guess if each one is
+        <strong>AI-generated</strong> or <strong>real</strong>.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const form    = document.getElementById('login-form');
+    const input   = document.getElementById('username');
+    const btn     = document.getElementById('start-btn');
+    const msg     = document.getElementById('msg');
+
+    function showError(text) {
+      msg.textContent = text;
+      msg.className   = 'msg msg-error visible';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = input.value.trim();
+      if (!username) { showError('Please enter your name.'); return; }
+
+      btn.disabled    = true;
+      btn.textContent = 'Starting…';
+      msg.className   = 'msg';
+
+      try {
+        const res  = await fetch('/api/login', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ username }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.error || 'Login failed. Try again.');
+          btn.disabled    = false;
+          btn.textContent = 'Start Game';
+          return;
+        }
+
+        // Store session info for the game page
+        sessionStorage.setItem('bon_username', data.username);
+        sessionStorage.setItem('bon_endTime',  data.endTime);
+        sessionStorage.setItem('bon_duration', data.sessionDurationMinutes);
+
+        window.location.href = '/game.html';
+      } catch (err) {
+        showError('Could not connect to server. Check your connection.');
+        btn.disabled    = false;
+        btn.textContent = 'Start Game';
+      }
+    });
+
+    input.focus();
+  </script>
+</body>
+</html>

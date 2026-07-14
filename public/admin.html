@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot or Not — Admin Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page" style="justify-content:flex-start; padding-top:2rem; align-items:stretch;">
+    <div class="container" style="max-width:900px; margin:0 auto;">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.5rem;">
+        <div class="site-title" style="font-size:1.8rem;">⚙️ Admin Dashboard</div>
+        <div>
+          <a href="/leaderboard.html" class="btn btn-secondary">Leaderboard</a>
+          <a href="/" class="btn btn-secondary" style="margin-left:0.5rem">Home</a>
+        </div>
+      </div>
+
+      <!-- ── Section 1: Summary Stats ── -->
+      <div class="card">
+        <div class="section-title">📊 Overview</div>
+        <div class="stat-grid" id="stat-grid">
+          <div class="stat-box"><div class="stat-val" id="s-participants">—</div><div class="stat-lbl">Participants</div></div>
+          <div class="stat-box"><div class="stat-val" id="s-answers">—</div><div class="stat-lbl">Total Answers</div></div>
+          <div class="stat-box"><div class="stat-val" id="s-correct">—</div><div class="stat-lbl">Correct</div></div>
+          <div class="stat-box"><div class="stat-val" id="s-accuracy">—</div><div class="stat-lbl">Overall Accuracy</div></div>
+        </div>
+      </div>
+
+      <!-- ── Section 2: Live Sessions ── -->
+      <div class="card">
+        <div class="section-title">🟢 Live Sessions <span id="session-count" class="muted" style="font-weight:400;font-size:0.85rem;"></span></div>
+        <div style="overflow-x:auto">
+          <table id="sessions-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>IP</th>
+                <th>Images Seen</th>
+                <th>Time Left</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody id="sessions-body">
+              <tr><td colspan="5" class="muted text-center" style="padding:1rem">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Section 3: Settings ── -->
+      <div class="card">
+        <div class="section-title">⚙️ Settings</div>
+        <form id="config-form" style="max-width:320px">
+          <div class="form-group">
+            <label for="session-duration">Session Duration (minutes)</label>
+            <input id="session-duration" type="number" min="1" max="120" step="1" value="">
+          </div>
+          <button type="submit" class="btn btn-primary" id="save-config-btn">Save</button>
+          <div id="config-msg" class="msg"></div>
+        </form>
+        <p class="note">Changes apply to <strong>new sessions only</strong> — players already in progress keep their original duration.</p>
+      </div>
+
+      <!-- ── Section 4: Full Logs ── -->
+      <div class="card">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div class="section-title" style="margin:0">📋 All Responses</div>
+          <a href="/api/admin/export" class="btn btn-secondary btn-sm" id="export-btn">⬇ Download CSV</a>
+        </div>
+        <div class="log-table-wrap">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Name</th>
+                <th>IP</th>
+                <th>Image ID</th>
+                <th>True</th>
+                <th>Guessed</th>
+                <th>✓</th>
+                <th>ms</th>
+              </tr>
+            </thead>
+            <tbody id="logs-body">
+              <tr><td colspan="8" class="muted text-center" style="padding:1rem">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ── Guard: check admin auth on load ──────────────────
+    async function checkAuth() {
+      const res = await fetch('/api/admin/config');
+      if (res.status === 401) {
+        window.location.href = '/admin-login.html';
+      }
+    }
+
+    function esc(str) {
+      return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function fmtMs(ms) {
+      if (ms == null || isNaN(ms)) return '—';
+      const m = Math.floor(ms / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    }
+
+    // ── Load Summary + Logs ───────────────────────────────
+    async function loadLogs() {
+      try {
+        const res  = await fetch('/api/admin/logs');
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const data = await res.json();
+
+        document.getElementById('s-participants').textContent = data.summary.participants;
+        document.getElementById('s-answers').textContent      = data.summary.totalAnswers;
+        document.getElementById('s-correct').textContent      = data.summary.correct;
+        document.getElementById('s-accuracy').textContent     = data.summary.overallAccuracy + '%';
+
+        const tbody = document.getElementById('logs-body');
+        if (data.entries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="muted text-center">No responses yet.</td></tr>';
+          return;
+        }
+        // Show newest first
+        tbody.innerHTML = [...data.entries].reverse().map(e => `
+          <tr>
+            <td>${esc(new Date(e.timestamp).toLocaleTimeString())}</td>
+            <td>${esc(e.username)}</td>
+            <td><code>${esc(e.privateIp)}</code></td>
+            <td><code style="font-size:0.75rem">${esc(e.imageId.slice(0,8))}…</code></td>
+            <td>${esc(e.trueLabel)}</td>
+            <td>${esc(e.choice)}</td>
+            <td style="color:${e.correct ? '#16a34a' : '#dc2626'}">${e.correct ? '✓' : '✗'}</td>
+            <td>${e.responseTimeMs ?? '—'}</td>
+          </tr>`).join('');
+      } catch { /* silent */ }
+    }
+
+    // ── Load Live Sessions ────────────────────────────────
+    async function loadSessions() {
+      try {
+        const res  = await fetch('/api/admin/active-sessions');
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const list = await res.json();
+
+        document.getElementById('session-count').textContent =
+          list.length ? `(${list.length} active)` : '(none)';
+
+        const tbody = document.getElementById('sessions-body');
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="muted text-center">No active sessions.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map(s => `
+          <tr>
+            <td><strong>${esc(s.username)}</strong></td>
+            <td><code>${esc(s.privateIp)}</code></td>
+            <td>${s.imagesServed}</td>
+            <td class="${s.remainingMs < 60000 ? 'timer warning' : ''}">${fmtMs(s.remainingMs)}</td>
+            <td>${esc(new Date(s.startTime).toLocaleTimeString())}</td>
+          </tr>`).join('');
+      } catch { /* silent */ }
+    }
+
+    // ── Load Config ───────────────────────────────────────
+    async function loadConfig() {
+      try {
+        const res  = await fetch('/api/admin/config');
+        if (!res.ok) return;
+        const cfg  = await res.json();
+        document.getElementById('session-duration').value = cfg.sessionDurationMinutes;
+      } catch { /* silent */ }
+    }
+
+    // ── Save Config ───────────────────────────────────────
+    document.getElementById('config-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const minutes = parseFloat(document.getElementById('session-duration').value);
+      const btn     = document.getElementById('save-config-btn');
+      const msg     = document.getElementById('config-msg');
+      btn.disabled  = true;
+
+      try {
+        const res = await fetch('/api/admin/config', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ sessionDurationMinutes: minutes }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          msg.textContent = 'Saved!';
+          msg.className   = 'msg msg-success visible';
+        } else {
+          msg.textContent = data.error || 'Save failed.';
+          msg.className   = 'msg msg-error visible';
+        }
+      } catch {
+        msg.textContent = 'Network error.';
+        msg.className   = 'msg msg-error visible';
+      } finally {
+        btn.disabled = false;
+        setTimeout(() => { msg.className = 'msg'; }, 2500);
+      }
+    });
+
+    // ── Init ──────────────────────────────────────────────
+    (async () => {
+      await checkAuth();
+      loadLogs();
+      loadSessions();
+      loadConfig();
+      // Poll live sessions every 5 seconds, logs every 10
+      setInterval(loadSessions, 5_000);
+      setInterval(loadLogs,     10_000);
+    })();
+  </script>
+</body>
+</html>

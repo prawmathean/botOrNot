@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot or Not — Leaderboard</title>
+  <meta name="description" content="Live leaderboard for the Bot or Not game.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page" style="justify-content:flex-start; padding-top:2rem;">
+    <div class="container">
+      <div class="text-center" style="margin-bottom:1.5rem">
+        <div class="site-title">🏆 Leaderboard</div>
+        <p class="subtitle">Ranked by accuracy, then total answered</p>
+      </div>
+
+      <div class="card" style="padding:0">
+        <div style="overflow-x:auto">
+          <table id="board-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>IP</th>
+                <th>Accuracy</th>
+                <th>Correct</th>
+                <th>Answered</th>
+              </tr>
+            </thead>
+            <tbody id="board-body">
+              <tr><td colspan="6" class="muted text-center" style="padding:2rem">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="text-center mt-2">
+        <span id="last-updated" class="muted"></span>
+        &nbsp;
+        <button id="refresh-btn" class="btn btn-secondary" onclick="loadBoard()">Refresh</button>
+        <a href="/" class="btn btn-secondary" style="margin-left:0.5rem">Home</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tbody   = document.getElementById('board-body');
+    const lastUpd = document.getElementById('last-updated');
+
+    function loadBoard() {
+      fetch('/api/leaderboard')
+        .then(r => r.json())
+        .then(board => {
+          if (board.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="muted text-center" style="padding:2rem">No results yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = board.map((row, i) => {
+            const rankClass = i < 3 ? `rank-${i + 1}` : '';
+            return `<tr class="${rankClass}">
+              <td>${i + 1}</td>
+              <td>${esc(row.username)}</td>
+              <td><code>${esc(row.privateIp)}</code></td>
+              <td><strong>${row.accuracyPercent}%</strong></td>
+              <td>${row.correctCount}</td>
+              <td>${row.totalAnswered}</td>
+            </tr>`;
+          }).join('');
+          lastUpd.textContent = 'Updated ' + new Date().toLocaleTimeString();
+        })
+        .catch(() => {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted text-center">Failed to load — retrying…</td></tr>';
+        });
+    }
+
+    function esc(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    loadBoard();
+    // Auto-refresh every 10 seconds
+    setInterval(loadBoard, 10_000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot or Not — Your Results</title>
+  <meta name="description" content="See how you did at telling AI from real photos.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page">
+    <div class="container" style="max-width:520px">
+      <div class="text-center" style="margin-bottom:1.5rem">
+        <div class="site-title">🎯 Results</div>
+        <p id="username-display" class="subtitle"></p>
+      </div>
+
+      <div class="card text-center">
+        <h2>Your Score</h2>
+        <div class="result-stat" id="accuracy-display">—%</div>
+        <p id="score-text" class="muted mb-0"></p>
+      </div>
+
+      <div class="card">
+        <h3>Your Stats</h3>
+        <div class="stat-grid" id="stats-grid">
+          <div class="stat-box">
+            <div class="stat-val" id="stat-total">—</div>
+            <div class="stat-lbl">Answered</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-correct">—</div>
+            <div class="stat-lbl">Correct</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-wrong">—</div>
+            <div class="stat-lbl">Wrong</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-rank">—</div>
+            <div class="stat-lbl">Rank</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center">
+        <a href="/leaderboard.html" class="btn btn-primary btn-lg">View Leaderboard</a>
+        <a href="/" class="btn btn-secondary btn-lg" style="margin-left:0.75rem; margin-top:0.5rem">Play Again</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const username    = sessionStorage.getItem('bon_username') || 'You';
+    const totalStr    = sessionStorage.getItem('bon_total');
+    const correctStr  = sessionStorage.getItem('bon_correct');
+    const total       = parseInt(totalStr)   || 0;
+    const correct     = parseInt(correctStr) || 0;
+    const wrong       = total - correct;
+    const accuracy    = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+    document.getElementById('username-display').textContent = `Well done, ${username}!`;
+    document.getElementById('accuracy-display').textContent = `${accuracy}%`;
+    document.getElementById('score-text').textContent       = `${correct} correct out of ${total} guesses`;
+    document.getElementById('stat-total').textContent       = total;
+    document.getElementById('stat-correct').textContent     = correct;
+    document.getElementById('stat-wrong').textContent       = wrong;
+
+    // Fetch leaderboard to find rank
+    fetch('/api/leaderboard')
+      .then(r => r.json())
+      .then(board => {
+        const idx = board.findIndex(row => row.username === username);
+        document.getElementById('stat-rank').textContent =
+          idx >= 0 ? `#${idx + 1}` : '—';
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

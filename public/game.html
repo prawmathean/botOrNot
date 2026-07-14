@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot or Not — Game</title>
+  <meta name="description" content="Guess whether the image is AI-generated or real.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page" style="justify-content:flex-start; padding-top:1.5rem;">
+    <div class="container">
+
+      <div class="game-header">
+        <div>
+          <span id="username-display" class="muted"></span>
+        </div>
+        <div id="timer" class="timer">--:--</div>
+        <div id="score-display" class="score-display">0 / 0</div>
+      </div>
+
+      <div class="card" style="padding:1rem">
+        <div class="image-wrap" id="image-wrap">
+          <span class="image-placeholder">Loading image…</span>
+        </div>
+
+        <div class="answer-buttons">
+          <button id="btn-bot" class="btn btn-bot" disabled>🤖 Bot</button>
+          <button id="btn-not" class="btn btn-not" disabled>📷 Not</button>
+        </div>
+
+        <div id="feedback" class="feedback"></div>
+      </div>
+
+      <p id="status-msg" class="muted text-center"></p>
+    </div>
+  </div>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────────
+    let username    = sessionStorage.getItem('bon_username');
+    let endTime     = new Date(sessionStorage.getItem('bon_endTime')).getTime();
+    let currentId   = null;
+    let imageStart  = null;  // when the current image was displayed (for responseTimeMs)
+    let totalAnswered = 0;
+    let totalCorrect  = 0;
+    let timerInterval = null;
+    let locked        = false; // prevent double-clicks
+    let sessionEnded  = false;
+
+    const btnBot       = document.getElementById('btn-bot');
+    const btnNot       = document.getElementById('btn-not');
+    const imageWrap    = document.getElementById('image-wrap');
+    const feedback     = document.getElementById('feedback');
+    const timerEl      = document.getElementById('timer');
+    const scoreEl      = document.getElementById('score-display');
+    const statusMsg    = document.getElementById('status-msg');
+    const userDisplay  = document.getElementById('username-display');
+
+    // ── Init ──────────────────────────────────────────────────────
+    if (!username || !endTime) {
+      window.location.href = '/';
+    } else {
+      userDisplay.textContent = username;
+      startTimer();
+      syncServerTime();          // correct for clock drift on load
+      loadNextImage();
+    }
+
+    // ── Timer ─────────────────────────────────────────────────────
+    function startTimer() {
+      timerInterval = setInterval(tickTimer, 500);
+      tickTimer();
+    }
+
+    function tickTimer() {
+      const remaining = endTime - Date.now();
+      if (remaining <= 0) {
+        clearInterval(timerInterval);
+        timerEl.textContent = '00:00';
+        timerEl.classList.add('warning');
+        if (!sessionEnded) endSession('Time\'s up!');
+        return;
+      }
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      timerEl.textContent = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+      if (remaining < 60000) timerEl.classList.add('warning');
+      else timerEl.classList.remove('warning');
+    }
+
+    // Sync server time periodically to avoid client clock drift
+    async function syncServerTime() {
+      try {
+        const res  = await fetch('/api/session-status', { credentials: 'include' });
+        if (!res.ok) { endSession('Session not found.'); return; }
+        const data = await res.json();
+        if (!data.active) { endSession('Your session has ended.'); return; }
+        // Trust server's remainingMs — adjust our local endTime reference
+        endTime = Date.now() + data.remainingMs;
+        sessionStorage.setItem('bon_endTime', new Date(endTime).toISOString());
+      } catch { /* ignore network errors during sync */ }
+    }
+
+    // ── Image Loading ─────────────────────────────────────────────
+    async function loadNextImage() {
+      if (sessionEnded) return;
+      setButtons(false); // disable while loading
+      feedback.textContent = '';
+      feedback.className   = 'feedback';
+      statusMsg.textContent = '';
+
+      // Sync every ~5 images
+      if ((totalAnswered % 5) === 0 && totalAnswered > 0) {
+        syncServerTime();
+      }
+
+      try {
+        const res  = await fetch('/api/next-image', { credentials: 'include' });
+        const data = await res.json();
+
+        if (!res.ok || data.sessionEnded) {
+          endSession('Session ended.');
+          return;
+        }
+
+        currentId  = data.imageId;
+        showImage(data.imageUrl);
+      } catch {
+        statusMsg.textContent = 'Network error — retrying in 2s…';
+        setTimeout(loadNextImage, 2000);
+      }
+    }
+
+    function showImage(url) {
+      // Use a new Image() so we enable the browser's cache (ETag/Cache-Control from server).
+      // If the same image ID is served again (pool repeat), the browser serves it from cache.
+      imageWrap.innerHTML = '<span class="image-placeholder">Loading…</span>';
+      const img = new Image();
+      img.className = 'game-img';
+      img.alt       = 'Guess: bot or not?';
+      img.onload = () => {
+        imageWrap.innerHTML = '';
+        imageWrap.appendChild(img);
+        imageStart = Date.now();
+        setButtons(true);
+      };
+      img.onerror = () => {
+        imageWrap.innerHTML = '<span class="image-placeholder">Image failed to load</span>';
+        setButtons(true); // let them skip
+        imageStart = Date.now();
+      };
+      img.src = url;
+    }
+
+    // ── Answer ────────────────────────────────────────────────────
+    async function submitAnswer(choice) {
+      if (locked || !currentId) return;
+      locked = true;
+      setButtons(false);
+
+      const responseTimeMs = imageStart ? Date.now() - imageStart : null;
+
+      try {
+        const res  = await fetch('/api/answer', {
+          method:      'POST',
+          headers:     { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body:        JSON.stringify({ imageId: currentId, choice, responseTimeMs }),
+        });
+
+        if (res.status === 403) { endSession('Session has ended.'); return; }
+
+        const data = await res.json();
+
+        totalAnswered++;
+        if (data.correct) totalCorrect++;
+        scoreEl.textContent = `${totalCorrect} / ${totalAnswered}`;
+
+        // Brief feedback flash
+        if (data.correct) {
+          feedback.textContent = `✓ Correct! It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
+          feedback.className   = 'feedback correct';
+        } else {
+          feedback.textContent = `✗ Wrong. It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
+          feedback.className   = 'feedback wrong';
+        }
+
+        // Store running totals for results page
+        sessionStorage.setItem('bon_total',   totalAnswered);
+        sessionStorage.setItem('bon_correct', totalCorrect);
+
+        // Small delay so feedback is visible, then load next
+        setTimeout(() => {
+          locked = false;
+          loadNextImage();
+        }, 800);
+
+      } catch {
+        feedback.textContent = 'Network error — please try again.';
+        feedback.className   = 'feedback wrong';
+        locked = false;
+        setButtons(true);
+      }
+    }
+
+    btnBot.addEventListener('click', () => submitAnswer('bot'));
+    btnNot.addEventListener('click', () => submitAnswer('not'));
+
+    function setButtons(enabled) {
+      btnBot.disabled = !enabled;
+      btnNot.disabled = !enabled;
+    }
+
+    // ── Session End ───────────────────────────────────────────────
+    function endSession(reason) {
+      if (sessionEnded) return;
+      sessionEnded = true;
+      clearInterval(timerInterval);
+      setButtons(false);
+      statusMsg.textContent = reason + ' Redirecting to results…';
+      setTimeout(() => { window.location.href = '/results.html'; }, 1500);
+    }
+  </script>
+</body>
+</html>

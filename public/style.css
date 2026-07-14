@@ -1,0 +1,339 @@
+/* style.css — Bot or Not shared stylesheet
+ * Minimal, functional, offline-capable (system fonts only).
+ * Designed for LAN use on varied devices.
+ */
+
+/* ── Reset & Base ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+/* ── Layout ───────────────────────────────────── */
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.container {
+  width: 100%;
+  max-width: 720px;
+}
+
+/* ── Typography ───────────────────────────────── */
+h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 1rem; }
+h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+p  { margin-bottom: 0.75rem; }
+
+.site-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: #52525b;
+  margin-bottom: 2rem;
+}
+
+/* ── Card ─────────────────────────────────────── */
+.card {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ── Forms ────────────────────────────────────── */
+.form-group { margin-bottom: 1.25rem; }
+
+label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"] {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid #d4d4d8;
+  border-radius: 6px;
+  background: #fafafa;
+  color: inherit;
+  outline: none;
+  transition: border-color 0.1s;
+}
+
+input:focus {
+  border-color: #3f3f46;
+  background: #fff;
+}
+
+/* ── Buttons ──────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: background-color 0.1s;
+}
+
+.btn-primary {
+  background: #18181b;
+  color: #fff;
+  border-color: #18181b;
+}
+.btn-primary:hover { background: #3f3f46; border-color: #3f3f46; }
+.btn-primary:active { background: #09090b; }
+.btn-primary:disabled { background: #a1a1aa; border-color: #a1a1aa; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #fff;
+  color: #18181b;
+  border-color: #d4d4d8;
+}
+.btn-secondary:hover { background: #f4f4f5; }
+.btn-secondary:active { background: #e4e4e7; }
+
+.btn-bot {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+  font-size: 1.25rem;
+  padding: 1rem 2rem;
+}
+.btn-bot:hover { background: #b91c1c; border-color: #b91c1c; }
+.btn-bot:active { background: #991b1b; }
+.btn-bot:disabled { background: #fca5a5; border-color: #fca5a5; cursor: not-allowed; }
+
+.btn-not {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+  font-size: 1.25rem;
+  padding: 1rem 2rem;
+}
+.btn-not:hover { background: #15803d; border-color: #15803d; }
+.btn-not:active { background: #166534; }
+.btn-not:disabled { background: #86efac; border-color: #86efac; cursor: not-allowed; }
+
+.btn-full { width: 100%; }
+.btn-lg { padding: 0.85rem 2rem; font-size: 1.1rem; }
+
+/* ── Error / Status Messages ──────────────────── */
+.msg {
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+  display: none; /* shown via JS */
+}
+.msg.visible { display: block; }
+.msg-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.msg-success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.msg-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+/* ── Game Page ────────────────────────────────── */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.timer {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  min-width: 70px;
+}
+
+.timer.warning { color: #dc2626; }
+
+.score-display {
+  font-size: 1rem;
+  color: #52525b;
+}
+
+.image-wrap {
+  width: 100%;
+  min-height: 320px;
+  max-height: 500px;
+  background: #e4e4e7;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+  position: relative;
+}
+
+.game-img {
+  max-width: 100%;
+  max-height: 500px;
+  object-fit: contain;
+  display: block;
+}
+
+.image-placeholder {
+  color: #a1a1aa;
+  font-size: 0.95rem;
+}
+
+.answer-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.answer-buttons .btn { flex: 1; }
+
+.feedback {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 1.5em;
+  margin-top: 0.75rem;
+}
+
+.feedback.correct { color: #16a34a; }
+.feedback.wrong   { color: #dc2626; }
+
+/* ── Leaderboard Table ────────────────────────── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+th, td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+th {
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #52525b;
+  background: #f4f4f5;
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafafa; }
+
+.rank-1 td:first-child { font-weight: 800; color: #ca8a04; }
+.rank-2 td:first-child { font-weight: 700; color: #71717a; }
+.rank-3 td:first-child { font-weight: 700; color: #b45309; }
+
+/* ── Admin Sections ───────────────────────────── */
+.admin-nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid #e4e4e7;
+}
+
+.log-table-wrap {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.log-table td { font-size: 0.82rem; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-box {
+  background: #f4f4f5;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-box .stat-val {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat-box .stat-lbl {
+  font-size: 0.78rem;
+  color: #71717a;
+  margin-top: 0.25rem;
+}
+
+.note { font-size: 0.85rem; color: #71717a; margin-top: 0.5rem; }
+
+/* ── Results Page ─────────────────────────────── */
+.result-stat {
+  font-size: 3rem;
+  font-weight: 800;
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.result-stat span { font-size: 1.2rem; font-weight: 400; color: #52525b; }
+
+/* ── Misc ─────────────────────────────────────── */
+.text-center { text-align: center; }
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mb-0 { margin-bottom: 0; }
+.muted { color: #71717a; font-size: 0.9rem; }
+
+/* ── Responsive ───────────────────────────────── */
+@media (max-width: 480px) {
+  h1 { font-size: 1.6rem; }
+  .site-title { font-size: 2rem; }
+  .card { padding: 1.25rem; }
+  .answer-buttons { flex-direction: column; }
+  .btn-bot, .btn-not { font-size: 1.1rem; padding: 0.85rem 1.5rem; }
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+}

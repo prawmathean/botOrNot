@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot or Not — Admin Login</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page">
+    <div class="container" style="max-width:400px">
+      <div class="text-center" style="margin-bottom:2rem">
+        <div class="site-title">🔐 Admin</div>
+        <p class="subtitle">Bot or Not — Admin Access</p>
+      </div>
+
+      <div class="card">
+        <h2>Sign in</h2>
+        <form id="admin-form">
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input id="password" type="password" placeholder="Admin password" required autocomplete="current-password">
+          </div>
+          <button id="login-btn" type="submit" class="btn btn-primary btn-full">Login</button>
+        </form>
+        <div id="msg" class="msg msg-error"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('admin-form');
+    const btn  = document.getElementById('login-btn');
+    const msg  = document.getElementById('msg');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('password').value;
+      btn.disabled = true;
+      btn.textContent = 'Checking…';
+      msg.className = 'msg';
+
+      try {
+        const res  = await fetch('/api/admin/login', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ password }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          msg.textContent = data.error || 'Invalid credentials.';
+          msg.className   = 'msg msg-error visible';
+          btn.disabled    = false;
+          btn.textContent = 'Login';
+          return;
+        }
+        window.location.href = '/admin.html';
+      } catch {
+        msg.textContent = 'Server error. Try again.';
+        msg.className   = 'msg msg-error visible';
+        btn.disabled    = false;
+        btn.textContent = 'Login';
+      }
+    });
+  </script>
+</body>
+</html>

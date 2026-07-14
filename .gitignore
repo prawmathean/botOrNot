@@ -1,1 +1,17 @@
+.env
+node_modules/
+
+# Dataset images — large, managed locally
 images/
+
+# Game data
+data/responses.jsonl
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+PROMPT.md
+
+# to set password : 
+# npm run set-admin-password -- "FS0C13TY"
