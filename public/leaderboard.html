@@ -11,8 +11,8 @@
   <div class="page" style="justify-content:flex-start; padding-top:2rem;">
     <div class="container">
       <div class="text-center" style="margin-bottom:1.5rem">
-        <div class="site-title">🏆 Leaderboard</div>
-        <p class="subtitle">Ranked by accuracy, then total answered</p>
+        <div class="site-title">Leaderboard</div>
+        <p class="subtitle">Ranked by points</p>
       </div>
 
       <div class="card" style="padding:0">
@@ -23,13 +23,13 @@
                 <th>Rank</th>
                 <th>Name</th>
                 <th>IP</th>
-                <th>Accuracy</th>
+                <th>Points</th>
                 <th>Correct</th>
                 <th>Answered</th>
               </tr>
             </thead>
             <tbody id="board-body">
-              <tr><td colspan="6" class="muted text-center" style="padding:2rem">Loading…</td></tr>
+              <tr><td colspan="6" class="muted text-center" style="padding:2rem">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -62,7 +62,7 @@
               <td>${i + 1}</td>
               <td>${esc(row.username)}</td>
               <td><code>${esc(row.privateIp)}</code></td>
-              <td><strong>${row.accuracyPercent}%</strong></td>
+              <td><strong>${row.points} pts</strong></td>
               <td>${row.correctCount}</td>
               <td>${row.totalAnswered}</td>
             </tr>`;
@@ -70,7 +70,7 @@
           lastUpd.textContent = 'Updated ' + new Date().toLocaleTimeString();
         })
         .catch(() => {
-          tbody.innerHTML = '<tr><td colspan="6" class="muted text-center">Failed to load — retrying…</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="muted text-center">Failed to load — retrying...</td></tr>';
         });
     }
 
@@ -79,7 +79,6 @@
     }
 
     loadBoard();
-    // Auto-refresh every 10 seconds
     setInterval(loadBoard, 10_000);
   </script>
 </body>
