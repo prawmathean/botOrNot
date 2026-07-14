@@ -11,7 +11,7 @@
     <div class="container" style="max-width:900px; margin:0 auto;">
 
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.5rem;">
-        <div class="site-title" style="font-size:1.8rem;">⚙️ Admin Dashboard</div>
+        <div class="site-title" style="font-size:1.8rem;">Admin Dashboard</div>
         <div>
           <a href="/leaderboard.html" class="btn btn-secondary">Leaderboard</a>
           <a href="/" class="btn btn-secondary" style="margin-left:0.5rem">Home</a>
@@ -20,7 +20,7 @@
 
       <!-- ── Section 1: Summary Stats ── -->
       <div class="card">
-        <div class="section-title">📊 Overview</div>
+        <div class="section-title">Overview</div>
         <div class="stat-grid" id="stat-grid">
           <div class="stat-box"><div class="stat-val" id="s-participants">—</div><div class="stat-lbl">Participants</div></div>
           <div class="stat-box"><div class="stat-val" id="s-answers">—</div><div class="stat-lbl">Total Answers</div></div>
@@ -31,7 +31,7 @@
 
       <!-- ── Section 2: Live Sessions ── -->
       <div class="card">
-        <div class="section-title">🟢 Live Sessions <span id="session-count" class="muted" style="font-weight:400;font-size:0.85rem;"></span></div>
+        <div class="section-title">Live Sessions <span id="session-count" class="muted" style="font-weight:400;font-size:0.85rem;"></span></div>
         <div style="overflow-x:auto">
           <table id="sessions-table">
             <thead>
@@ -52,7 +52,7 @@
 
       <!-- ── Section 3: Settings ── -->
       <div class="card">
-        <div class="section-title">⚙️ Settings</div>
+        <div class="section-title">Settings</div>
         <form id="config-form" style="max-width:320px">
           <div class="form-group">
             <label for="session-duration">Session Duration (minutes)</label>
@@ -67,7 +67,7 @@
       <!-- ── Section 4: Full Logs ── -->
       <div class="card">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
-          <div class="section-title" style="margin:0">📋 All Responses</div>
+          <div class="section-title" style="margin:0">All Responses</div>
           <a href="/api/admin/export" class="btn btn-secondary btn-sm" id="export-btn">⬇ Download CSV</a>
         </div>
         <div class="log-table-wrap">
