@@ -19,7 +19,7 @@ const cookieParser = require('cookie-parser');
 const fs           = require('fs');
 const path         = require('path');
 const crypto       = require('crypto');
-const bcrypt       = require('bcryptjs');
+// bcryptjs removed — plaintext password comparison used for LAN simplicity
 const os           = require('os');
 
 // ── Config & Paths ─────────────────────────────────────────────────────────
@@ -27,10 +27,14 @@ const os           = require('os');
 const PORT           = parseInt(process.env.PORT || '6767', 10);
 const ROOT           = __dirname;
 const DATA_DIR       = path.join(ROOT, 'data');
-const MANIFEST_PATH  = path.join(DATA_DIR, 'manifest.json');
-const RESPONSES_PATH = path.join(DATA_DIR, 'responses.jsonl');
-const CONFIG_PATH    = path.join(ROOT, 'config.json');
-const PUBLIC_DIR     = path.join(ROOT, 'public');
+const MANIFEST_PATH    = path.join(DATA_DIR, 'manifest.json');
+const RESPONSES_PATH   = path.join(DATA_DIR, 'responses.jsonl');
+const LEADERBOARD_PATH = path.join(DATA_DIR, 'leaderboard.json');
+const CONFIG_PATH      = path.join(ROOT, 'config.json');
+const PUBLIC_DIR       = path.join(ROOT, 'public');
+
+// Points awarded per correct answer
+const POINTS_PER_CORRECT = 10;
 
 // ── Startup Checks ─────────────────────────────────────────────────────────
 
@@ -63,10 +67,64 @@ if (botCount === 0 || notCount === 0) {
 }
 console.log(`[INFO] Manifest loaded: ${botCount} bot, ${notCount} real images.`);
 
-// Ensure data dir and responses file exist
+// Ensure data dir and data files exist
 fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(RESPONSES_PATH)) {
   fs.writeFileSync(RESPONSES_PATH, '', 'utf8');
+}
+if (!fs.existsSync(LEADERBOARD_PATH)) {
+  fs.writeFileSync(LEADERBOARD_PATH, '{}', 'utf8');
+}
+
+// ── Leaderboard Helpers ────────────────────────────────────────────────────
+
+/**
+ * Read leaderboard from disk. Returns a plain object keyed by username.
+ */
+function readLeaderboard() {
+  try {
+    return JSON.parse(fs.readFileSync(LEADERBOARD_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Update one player's entry in leaderboard.json and write to disk.
+ * Node.js is single-threaded so this synchronous read-modify-write is safe.
+ */
+function updateLeaderboard(username, privateIp, correct) {
+  const lb = readLeaderboard();
+  if (!lb[username]) {
+    lb[username] = {
+      username,
+      privateIp,
+      totalAnswered: 0,
+      correctCount:  0,
+      points:        0,
+      lastUpdated:   null,
+    };
+  }
+  const entry = lb[username];
+  entry.privateIp    = privateIp; // update in case IP changed
+  entry.totalAnswered++;
+  if (correct) {
+    entry.correctCount++;
+    entry.points += POINTS_PER_CORRECT;
+  }
+  entry.lastUpdated = new Date().toISOString();
+  fs.writeFileSync(LEADERBOARD_PATH, JSON.stringify(lb, null, 2), 'utf8');
+}
+
+/**
+ * Return leaderboard as a sorted array (by points desc, then totalAnswered desc).
+ */
+function getSortedLeaderboard() {
+  const lb = readLeaderboard();
+  return Object.values(lb).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    return b.totalAnswered - a.totalAnswered;
+  });
 }
 
 // ── In-memory Sessions ─────────────────────────────────────────────────────
@@ -317,6 +375,13 @@ app.post('/api/answer', requireSession, (req, res) => {
     if (err) console.error('[ERROR] Failed to write response:', err);
   });
 
+  // Update the live leaderboard.json
+  try {
+    updateLeaderboard(session.username, session.privateIp, correct);
+  } catch (err) {
+    console.error('[ERROR] Failed to update leaderboard:', err);
+  }
+
   // Reveal the true label ONLY after they've committed their answer
   res.json({ correct, trueLabel });
 });
@@ -340,48 +405,22 @@ app.get('/api/session-status', requireSession, (req, res) => {
 /**
  * GET /api/leaderboard
  * Public — no auth required.
- * Reads and aggregates responses.jsonl.
+ * Reads from leaderboard.json (maintained live as answers come in).
  */
 app.get('/api/leaderboard', (req, res) => {
-  const raw = fs.readFileSync(RESPONSES_PATH, 'utf8').trim();
-  if (!raw) return res.json([]);
+  res.json(getSortedLeaderboard());
+});
 
-  const lines = raw.split('\n').filter(Boolean);
-  const totals = new Map(); // key: username
-
-  for (const line of lines) {
-    try {
-      const r   = JSON.parse(line);
-      const key = r.username;
-      if (!totals.has(key)) {
-        totals.set(key, {
-          username:      r.username,
-          privateIp:     r.privateIp || 'unknown',
-          totalAnswered: 0,
-          correctCount:  0,
-        });
-      }
-      const t = totals.get(key);
-      t.totalAnswered++;
-      if (r.correct) t.correctCount++;
-    } catch {
-      // Malformed line — skip silently
-    }
-  }
-
-  const board = Array.from(totals.values()).map(t => ({
-    ...t,
-    accuracyPercent: t.totalAnswered > 0
-      ? Math.round((t.correctCount / t.totalAnswered) * 100)
-      : 0,
-  }));
-
-  board.sort((a, b) => {
-    if (b.accuracyPercent !== a.accuracyPercent) return b.accuracyPercent - a.accuracyPercent;
-    return b.totalAnswered - a.totalAnswered;
-  });
-
-  res.json(board);
+/**
+ * POST /api/quit
+ * Participant chooses to end their session early.
+ */
+app.post('/api/quit', requireSession, (req, res) => {
+  const session = req.session;
+  // Mark session as ended by setting endTime to now
+  session.endTime = Date.now();
+  res.clearCookie('bon_user');
+  res.json({ ok: true, username: session.username });
 });
 
 // ── Admin API ───────────────────────────────────────────────────────────────

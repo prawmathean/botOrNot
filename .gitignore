@@ -7,9 +7,10 @@ images/
 # Game data
 data/responses.jsonl
 
-# OS junk
+# OS and junk
 .DS_Store
 Thumbs.db
+data/manifest.json
 
 PROMPT.md
 
