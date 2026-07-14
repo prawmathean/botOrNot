@@ -12,6 +12,7 @@ data/responses.jsonl
 Thumbs.db
 data/manifest.json
 
+data/*
 PROMPT.md
 
 # to set password : 
