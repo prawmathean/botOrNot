@@ -1,19 +1,22 @@
+# ── Secrets ──────────────────────────────────────────────────────
 .env
+
+# ── Dependencies ─────────────────────────────────────────────────
 node_modules/
 
-# Dataset images — large, managed locally
+# ── Images (large dataset, manage locally) ───────────────────────
 images/
 
-# Game data
-data/responses.jsonl
+# ── Runtime data (generated during events, not versioned) ────────
+data/
 
-# OS and junk
+# ── OS / editor junk ─────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-data/manifest.json
+*.swp
+*.swo
+.idea/
+.vscode/
 
-data/*
+# ── Internal prompt / design notes ───────────────────────────────
 PROMPT.md
-
-# to set password : 
-# npm run set-admin-password -- "FS0C13TY"

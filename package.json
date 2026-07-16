@@ -1,21 +1,25 @@
 {
   "name": "bot-or-not",
   "version": "1.0.0",
-  "description": "LAN-hosted 'Bot or Not' image guessing game",
+  "description": "LAN-hosted image guessing game — can participants tell AI-generated images from real ones?",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build-manifest": "node scripts/build-manifest.js",
-    "set-admin-password": "node -e \"const bcrypt=require('bcryptjs'),pw=process.argv[1];if(!pw){console.error('Usage: npm run set-admin-password -- yourpassword');process.exit(1);}bcrypt.hash(pw,12).then(h=>console.log('\\nAdd this to your .env file:\\nADMIN_PASSWORD_HASH='+h+'\\n')).catch(e=>{console.error(e);process.exit(1);});\" --"
+    "build-manifest-force": "node scripts/build-manifest.js --force",
+    "generate-secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
 }
