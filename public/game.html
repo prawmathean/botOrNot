@@ -4,8 +4,77 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bot or Not — Game</title>
-  <meta name="description" content="Guess whether the image is AI-generated or real.">
+  <meta name="description" content="Guess whether the image or text is AI-generated or real.">
   <link rel="stylesheet" href="/style.css">
+  <style>
+    /* ── Text Challenge Card ──────────────────────── */
+    .challenge-type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      margin-bottom: 0.85rem;
+    }
+    .challenge-type-badge.image-badge {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+    .challenge-type-badge.text-badge {
+      background: #faf5ff;
+      color: #7c3aed;
+      border: 1px solid #ddd6fe;
+    }
+    .challenge-type-badge .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .text-challenge-wrap {
+      width: 100%;
+      min-height: 200px;
+      background: #fafafa;
+      border: 1.5px solid #e4e4e7;
+      border-radius: 8px;
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .text-challenge-wrap.loading {
+      align-items: center;
+      justify-content: center;
+    }
+    .text-content {
+      font-size: 1.05rem;
+      line-height: 1.75;
+      color: #27272a;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .text-loading-spinner {
+      color: #a1a1aa;
+      font-size: 0.95rem;
+    }
+
+    /* Fade-in animation for new challenges */
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in {
+      animation: fadeSlideIn 0.25s ease-out both;
+    }
+  </style>
 </head>
 <body>
   <div class="page" style="justify-content:flex-start; padding-top:1.5rem;">
@@ -36,8 +105,21 @@
       </div>
 
       <div class="card" style="padding:1rem">
-        <div class="image-wrap" id="image-wrap">
-          <span class="image-placeholder">Loading image...</span>
+
+        <!-- Challenge type badge -->
+        <div id="challenge-badge" class="challenge-type-badge image-badge" style="display:none;">
+          <span class="badge-dot"></span>
+          <span id="badge-label">Image</span>
+        </div>
+
+        <!-- Image challenge area -->
+        <div class="image-wrap" id="image-wrap" style="display:flex;">
+          <span class="image-placeholder">Loading...</span>
+        </div>
+
+        <!-- Text challenge area (hidden by default) -->
+        <div class="text-challenge-wrap loading" id="text-wrap" style="display:none;">
+          <span class="text-loading-spinner">Loading text...</span>
         </div>
 
         <div class="answer-buttons">
@@ -54,10 +136,11 @@
 
   <script>
     // ── State ─────────────────────────────────────────────────────
-    let username    = sessionStorage.getItem('bon_username');
-    let endTime     = new Date(sessionStorage.getItem('bon_endTime')).getTime();
-    let currentId   = null;
-    let imageStart  = null;
+    let username      = sessionStorage.getItem('bon_username');
+    let endTime       = new Date(sessionStorage.getItem('bon_endTime')).getTime();
+    let currentId     = null;      // imageId or textId for the current challenge
+    let currentType   = null;      // 'image' | 'text'
+    let challengeStart = null;
     let totalAnswered = 0;
     let totalCorrect  = 0;
     let totalPoints   = 0;
@@ -67,15 +150,18 @@
 
     const POINTS_PER_CORRECT = 10; // must match server
 
-    const btnBot      = document.getElementById('btn-bot');
-    const btnNot      = document.getElementById('btn-not');
-    const imageWrap   = document.getElementById('image-wrap');
-    const feedback    = document.getElementById('feedback');
-    const timerEl     = document.getElementById('timer');
-    const scoreEl     = document.getElementById('score-display');
-    const statusMsg   = document.getElementById('status-msg');
-    const userDisplay = document.getElementById('username-display');
-    const quitOverlay = document.getElementById('quit-confirm');
+    const btnBot       = document.getElementById('btn-bot');
+    const btnNot       = document.getElementById('btn-not');
+    const imageWrap    = document.getElementById('image-wrap');
+    const textWrap     = document.getElementById('text-wrap');
+    const feedback     = document.getElementById('feedback');
+    const timerEl      = document.getElementById('timer');
+    const scoreEl      = document.getElementById('score-display');
+    const statusMsg    = document.getElementById('status-msg');
+    const userDisplay  = document.getElementById('username-display');
+    const quitOverlay  = document.getElementById('quit-confirm');
+    const badge        = document.getElementById('challenge-badge');
+    const badgeLabel   = document.getElementById('badge-label');
 
     // ── Init ──────────────────────────────────────────────────────
     if (!username || !endTime) {
@@ -84,7 +170,7 @@
       userDisplay.textContent = username;
       startTimer();
       syncServerTime();
-      loadNextImage();
+      loadNextChallenge();
     }
 
     // ── Timer ─────────────────────────────────────────────────────
@@ -137,20 +223,21 @@
       endSession('You quit the game.');
     });
 
-    // ── Image Loading ─────────────────────────────────────────────
-    async function loadNextImage() {
+    // ── Challenge Loading ─────────────────────────────────────────
+    async function loadNextChallenge() {
       if (sessionEnded) return;
       setButtons(false);
       feedback.textContent = '';
       feedback.className   = 'feedback';
       statusMsg.textContent = '';
 
+      // Periodically re-sync server time
       if ((totalAnswered % 5) === 0 && totalAnswered > 0) {
         syncServerTime();
       }
 
       try {
-        const res  = await fetch('/api/next-image', { credentials: 'include' });
+        const res  = await fetch('/api/next-challenge', { credentials: 'include' });
         const data = await res.json();
 
         if (!res.ok || data.sessionEnded) {
@@ -158,31 +245,86 @@
           return;
         }
 
-        currentId = data.imageId;
-        showImage(data.imageUrl);
+        currentType = data.challengeType;
+
+        // Update badge
+        badge.style.display = 'inline-flex';
+        if (currentType === 'text') {
+          badge.className = 'challenge-type-badge text-badge';
+          badgeLabel.textContent = 'Text Snippet';
+          showTextChallenge(data.textId, data.textUrl);
+        } else {
+          badge.className = 'challenge-type-badge image-badge';
+          badgeLabel.textContent = 'Image';
+          currentId = data.imageId;
+          showImage(data.imageUrl);
+        }
       } catch {
         statusMsg.textContent = 'Network error — retrying in 2s...';
-        setTimeout(loadNextImage, 2000);
+        setTimeout(loadNextChallenge, 2000);
       }
     }
 
+    // ── Image Display ─────────────────────────────────────────────
     function showImage(url) {
+      // Show image area, hide text area
+      imageWrap.style.display = 'flex';
+      textWrap.style.display  = 'none';
+
       imageWrap.innerHTML = '<span class="image-placeholder">Loading...</span>';
+      imageWrap.classList.remove('fade-in');
+
       const img = new Image();
       img.className = 'game-img';
       img.alt       = 'Guess: bot or not?';
       img.onload = () => {
         imageWrap.innerHTML = '';
         imageWrap.appendChild(img);
-        imageStart = Date.now();
+        imageWrap.classList.add('fade-in');
+        challengeStart = Date.now();
         setButtons(true);
       };
       img.onerror = () => {
         imageWrap.innerHTML = '<span class="image-placeholder">Image failed to load</span>';
         setButtons(true);
-        imageStart = Date.now();
+        challengeStart = Date.now();
       };
       img.src = url;
+    }
+
+    // ── Text Display ──────────────────────────────────────────────
+    async function showTextChallenge(textId, textUrl) {
+      // Show text area, hide image area
+      imageWrap.style.display = 'none';
+      textWrap.style.display  = 'flex';
+      textWrap.className      = 'text-challenge-wrap loading';
+      textWrap.innerHTML      = '<span class="text-loading-spinner">Loading text...</span>';
+
+      try {
+        const res  = await fetch(textUrl, { credentials: 'include' });
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+
+        currentId = data.textId;
+
+        textWrap.className = 'text-challenge-wrap fade-in';
+        textWrap.innerHTML = `<p class="text-content">${escapeHtml(data.text)}</p>`;
+
+        challengeStart = Date.now();
+        setButtons(true);
+      } catch {
+        textWrap.innerHTML = '<span class="text-loading-spinner">Failed to load text. Skipping...</span>';
+        setTimeout(loadNextChallenge, 1500);
+      }
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
 
     // ── Answer ────────────────────────────────────────────────────
@@ -191,14 +333,22 @@
       locked = true;
       setButtons(false);
 
-      const responseTimeMs = imageStart ? Date.now() - imageStart : null;
+      const responseTimeMs = challengeStart ? Date.now() - challengeStart : null;
+
+      // Build body based on challenge type
+      const body = { choice, responseTimeMs };
+      if (currentType === 'text') {
+        body.textId = currentId;
+      } else {
+        body.imageId = currentId;
+      }
 
       try {
         const res  = await fetch('/api/answer', {
           method:      'POST',
           headers:     { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body:        JSON.stringify({ imageId: currentId, choice, responseTimeMs }),
+          body:        JSON.stringify(body),
         });
 
         if (res.status === 403) { endSession('Session has ended.'); return; }
@@ -212,11 +362,14 @@
         }
         scoreEl.textContent = `${totalPoints} pts`;
 
+        const contentLabel = data.trueLabel === 'bot' ? 'AI-generated' : 'real';
+        const contentKind  = data.challengeType === 'text' ? 'text' : 'photo';
+
         if (data.correct) {
-          feedback.textContent = `Correct! It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
+          feedback.textContent = `Correct! It was ${contentLabel} ${contentKind}.`;
           feedback.className   = 'feedback correct';
         } else {
-          feedback.textContent = `Wrong. It was ${data.trueLabel === 'bot' ? 'AI-generated' : 'a real photo'}.`;
+          feedback.textContent = `Wrong. It was ${contentLabel} ${contentKind}.`;
           feedback.className   = 'feedback wrong';
         }
 
@@ -226,8 +379,8 @@
 
         setTimeout(() => {
           locked = false;
-          loadNextImage();
-        }, 800);
+          loadNextChallenge();
+        }, 900);
 
       } catch {
         feedback.textContent = 'Network error — please try again.';

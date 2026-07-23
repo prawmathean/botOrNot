@@ -10,6 +10,11 @@
  * IMAGE POOL EXHAUSTION:
  * - When a participant has seen every image in the pool, repeats are allowed intentionally.
  *   This is useful data — a participant may still answer differently on repeat.
+ *
+ * TEXT CHALLENGE MIXING:
+ * - Along with images, text snippets from human-ai-text.csv are served at random intervals.
+ * - The probability of getting a text vs image is weighted (TEXT_CHALLENGE_PROBABILITY).
+ * - Text IDs are tracked per session to avoid immediate repeats, just like images.
  */
 
 require('dotenv').config();
@@ -24,7 +29,7 @@ const os           = require('os');
 
 // ── Config & Paths ─────────────────────────────────────────────────────────
 
-const PORT           = parseInt(process.env.PORT || '6767', 10);
+const PORT           = parseInt(process.env.PORT || '6768', 10);
 const ROOT           = __dirname;
 const DATA_DIR       = path.join(ROOT, 'data');
 const MANIFEST_PATH    = path.join(DATA_DIR, 'manifest.json');
@@ -32,9 +37,14 @@ const RESPONSES_PATH   = path.join(DATA_DIR, 'responses.jsonl');
 const LEADERBOARD_PATH = path.join(DATA_DIR, 'leaderboard.json');
 const CONFIG_PATH      = path.join(ROOT, 'config.json');
 const PUBLIC_DIR       = path.join(ROOT, 'public');
+const TEXT_CSV_PATH    = path.join(ROOT, 'datasets', 'human-ai-text.csv');
 
 // Points awarded per correct answer
 const POINTS_PER_CORRECT = 10;
+
+// Probability (0–1) that a challenge is a text snippet instead of an image.
+// With ~54k images and ~1000 texts, 0.15 gives text a fair but not dominant presence.
+const TEXT_CHALLENGE_PROBABILITY = 0.15;
 
 // ── Startup Checks ─────────────────────────────────────────────────────────
 
@@ -66,6 +76,55 @@ if (botCount === 0 || notCount === 0) {
   process.exit(1);
 }
 console.log(`[INFO] Manifest loaded: ${botCount} bot, ${notCount} real images.`);
+
+// ── Text Dataset Loading ────────────────────────────────────────────────────
+
+/**
+ * Parse the human-ai-text CSV into an in-memory array.
+ * Each entry: { id, text, label: 'bot'|'not' }
+ * author_type 'AI' → label 'bot', 'Human' → label 'not'
+ */
+function parseTextCsv(csvPath) {
+  if (!fs.existsSync(csvPath)) {
+    console.warn('[WARN] Text dataset not found at:', csvPath, '— text challenges disabled.');
+    return [];
+  }
+  const raw   = fs.readFileSync(csvPath, 'utf8');
+  const lines = raw.split('\n').filter(Boolean);
+  if (lines.length < 2) return [];
+
+  // Parse header to find column indices robustly
+  const header  = lines[0].split(',').map(h => h.trim().replace(/\r/g, ''));
+  const idxId   = header.indexOf('text_id');
+  const idxText = header.indexOf('content_text');
+  const idxType = header.indexOf('author_type');
+
+  if (idxId === -1 || idxText === -1 || idxType === -1) {
+    console.warn('[WARN] Text CSV is missing expected columns (text_id, content_text, author_type). Text challenges disabled.');
+    return [];
+  }
+
+  const entries = [];
+  for (let i = 1; i < lines.length; i++) {
+    // Simple CSV split — fields have no embedded commas/quotes in this dataset
+    const cols       = lines[i].split(',');
+    const textId     = (cols[idxId]   || '').trim().replace(/\r/g, '');
+    const contentRaw = (cols[idxText] || '').trim().replace(/\r/g, '');
+    const authorType = (cols[idxType] || '').trim().replace(/\r/g, '');
+
+    if (!textId || !contentRaw) continue;
+
+    const label = authorType === 'AI' ? 'bot' : 'not';
+    entries.push({ id: textId, text: contentRaw, label });
+  }
+  return entries;
+}
+
+const textDataset    = parseTextCsv(TEXT_CSV_PATH);
+const textDatasetMap = new Map(textDataset.map(e => [e.id, e]));
+const textBotCount   = textDataset.filter(e => e.label === 'bot').length;
+const textNotCount   = textDataset.filter(e => e.label === 'not').length;
+console.log(`[INFO] Text dataset loaded: ${textDataset.length} entries (${textBotCount} AI, ${textNotCount} human).`);
 
 // Ensure data dir and data files exist
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -130,7 +189,7 @@ function getSortedLeaderboard() {
 // ── In-memory Sessions ─────────────────────────────────────────────────────
 
 /**
- * Map<username, { username, privateIp, startTime, endTime, servedImageIds: Set }>
+ * Map<username, { username, privateIp, startTime, endTime, servedImageIds: Set, servedTextIds: Set }>
  */
 const activeSessions = new Map();
 
@@ -200,6 +259,26 @@ function pickImage(servedIds) {
 }
 
 /**
+ * Pick a random text entry from the text dataset.
+ * Tries to avoid repeats; falls back to full pool if exhausted.
+ */
+function pickText(servedTextIds) {
+  if (textDataset.length === 0) return null;
+  const unserved = textDataset.filter(e => !servedTextIds.has(e.id));
+  const pool     = unserved.length > 0 ? unserved : textDataset;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
+ * Decide whether to serve a text or image challenge.
+ * Picks text with TEXT_CHALLENGE_PROBABILITY, but falls back to image if no texts available.
+ */
+function pickChallengeType() {
+  if (textDataset.length === 0) return 'image';
+  return Math.random() < TEXT_CHALLENGE_PROBABILITY ? 'text' : 'image';
+}
+
+/**
  * Get MIME type from file extension.
  */
 function getMime(filename) {
@@ -253,6 +332,7 @@ app.post('/api/login', (req, res) => {
     startTime: now,
     endTime,
     servedImageIds: new Set(),
+    servedTextIds:  new Set(),
   });
 
   // Simple cookie — just the username. Auth is checked server-side against activeSessions.
@@ -273,7 +353,7 @@ app.post('/api/login', (req, res) => {
 
 /**
  * GET /api/next-image
- * Returns the next image to show the participant.
+ * Legacy endpoint — kept for backward compatibility. Delegates to next-challenge.
  * NEVER reveals the label.
  */
 app.get('/api/next-image', requireSession, (req, res) => {
@@ -288,11 +368,65 @@ app.get('/api/next-image', requireSession, (req, res) => {
   session.servedImageIds.add(entry.id);
 
   res.json({
-    imageId:  entry.id,
-    imageUrl: `/api/image/${entry.id}`,
-    // Provide Cache-Control hint: image can be cached by browser for the session duration.
-    // The image itself is served with immutable headers.
+    challengeType: 'image',
+    imageId:       entry.id,
+    imageUrl:      `/api/image/${entry.id}`,
   });
+});
+
+/**
+ * GET /api/next-challenge
+ * Returns the next challenge — either an image or a text snippet — chosen at random.
+ * The type is indicated by challengeType: 'image' | 'text'.
+ * NEVER reveals the label.
+ */
+app.get('/api/next-challenge', requireSession, (req, res) => {
+  const session = req.session;
+  const now     = Date.now();
+
+  if (now > session.endTime) {
+    return res.json({ sessionEnded: true });
+  }
+
+  const type = pickChallengeType();
+
+  if (type === 'text') {
+    const entry = pickText(session.servedTextIds);
+    if (!entry) {
+      // Fallback to image if text dataset is somehow empty
+      const img = pickImage(session.servedImageIds);
+      session.servedImageIds.add(img.id);
+      return res.json({ challengeType: 'image', imageId: img.id, imageUrl: `/api/image/${img.id}` });
+    }
+    session.servedTextIds.add(entry.id);
+    return res.json({
+      challengeType: 'text',
+      textId:        entry.id,
+      // text content is fetched separately so it isn't cached with the label
+      textUrl:       `/api/text/${entry.id}`,
+    });
+  }
+
+  // Image challenge
+  const entry = pickImage(session.servedImageIds);
+  session.servedImageIds.add(entry.id);
+  res.json({
+    challengeType: 'image',
+    imageId:       entry.id,
+    imageUrl:      `/api/image/${entry.id}`,
+  });
+});
+
+/**
+ * GET /api/text/:id
+ * Returns the text content for a text challenge. NEVER reveals the label.
+ */
+app.get('/api/text/:id', requireSession, (req, res) => {
+  const entry = textDatasetMap.get(req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Text not found' });
+
+  // Return only the text — label stays server-side
+  res.json({ textId: entry.id, text: entry.text });
 });
 
 /**
@@ -334,7 +468,9 @@ app.get('/api/image/:id', (req, res) => {
 
 /**
  * POST /api/answer
- * Body: { imageId, choice: "bot"|"not", responseTimeMs }
+ * Accepts answers for both image and text challenges.
+ * Body: { imageId?, textId?, choice: "bot"|"not", responseTimeMs }
+ * Exactly one of imageId or textId must be provided.
  */
 app.post('/api/answer', requireSession, (req, res) => {
   const session = req.session;
@@ -344,25 +480,46 @@ app.post('/api/answer', requireSession, (req, res) => {
     return res.status(403).json({ error: 'Session has ended — answer not accepted' });
   }
 
-  const { imageId, choice, responseTimeMs } = req.body;
+  const { imageId, textId, choice, responseTimeMs } = req.body;
 
-  if (!imageId || !choice) {
-    return res.status(400).json({ error: 'imageId and choice are required' });
+  if (!choice) {
+    return res.status(400).json({ error: 'choice is required' });
   }
   if (choice !== 'bot' && choice !== 'not') {
     return res.status(400).json({ error: 'choice must be "bot" or "not"' });
   }
+  if (!imageId && !textId) {
+    return res.status(400).json({ error: 'imageId or textId is required' });
+  }
 
-  const entry = manifestMap.get(imageId);
-  if (!entry) return res.status(404).json({ error: 'Unknown imageId' });
+  let trueLabel, challengeType, challengeId;
 
-  const trueLabel = entry.label;
-  const correct   = choice === trueLabel;
+  if (textId) {
+    // Text challenge
+    const entry = textDatasetMap.get(textId);
+    if (!entry) return res.status(404).json({ error: 'Unknown textId' });
+    trueLabel     = entry.label;
+    challengeType = 'text';
+    challengeId   = textId;
+  } else {
+    // Image challenge
+    const entry = manifestMap.get(imageId);
+    if (!entry) return res.status(404).json({ error: 'Unknown imageId' });
+    trueLabel     = entry.label;
+    challengeType = 'image';
+    challengeId   = imageId;
+  }
+
+  const correct = choice === trueLabel;
 
   const record = {
     username:       session.username,
     privateIp:      session.privateIp,
-    imageId,
+    challengeType,
+    challengeId,
+    // Keep imageId field for backward compatibility with existing exports
+    imageId:        challengeType === 'image' ? challengeId : null,
+    textId:         challengeType === 'text'  ? challengeId : null,
     trueLabel,
     choice,
     correct,
@@ -383,7 +540,7 @@ app.post('/api/answer', requireSession, (req, res) => {
   }
 
   // Reveal the true label ONLY after they've committed their answer
-  res.json({ correct, trueLabel });
+  res.json({ correct, trueLabel, challengeType });
 });
 
 /**
@@ -502,6 +659,7 @@ app.get('/api/admin/active-sessions', requireAdmin, (req, res) => {
     endTime:      new Date(s.endTime).toISOString(),
     remainingMs:  Math.max(0, s.endTime - now),
     imagesServed: s.servedImageIds.size,
+    textsServed:  s.servedTextIds.size,
   }));
   res.json(list);
 });
@@ -515,9 +673,9 @@ app.get('/api/admin/export', requireAdmin, (req, res) => {
   const lines = raw ? raw.split('\n').filter(Boolean) : [];
   const entries = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 
-  const header = 'username,privateIp,imageId,trueLabel,choice,correct,timestamp,responseTimeMs\n';
+  const header = 'username,privateIp,imageId,textId,trueLabel,choice,correct,timestamp,responseTimeMs\n';
   const rows   = entries.map(e =>
-    [e.username, e.privateIp, e.imageId, e.trueLabel, e.choice, e.correct, e.timestamp, e.responseTimeMs ?? '']
+    [e.username, e.privateIp, e.imageId, e.textId, e.trueLabel, e.choice, e.correct, e.timestamp, e.responseTimeMs ?? '']
       .map(v => `"${String(v).replace(/"/g, '""')}"`)
       .join(',')
   ).join('\n');
@@ -556,6 +714,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`│  Admin:   http://${lanIp}:${PORT}/admin-login.html │`);
   console.log('├─────────────────────────────────────────────┤');
   console.log(`│  Images: ${manifest.length} total (${botCount} bot, ${notCount} real)      │`);
+  console.log(`│  Texts:  ${textDataset.length} total (${textBotCount} AI, ${textNotCount} human)            │`);
+  console.log(`│  Text challenge rate: ${Math.round(TEXT_CHALLENGE_PROBABILITY * 100)}%                    │`);
   console.log('└─────────────────────────────────────────────┘\n');
   console.log('Share the LAN URL with participants. Press Ctrl+C to stop.\n');
 });

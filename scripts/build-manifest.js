@@ -26,8 +26,8 @@ const path   = require('path');
 const crypto = require('crypto');
 
 const ROOT          = path.resolve(__dirname, '..');
-const BOT_DIR       = path.join(ROOT, 'images', 'datasets', 'bot');
-const NOT_DIR       = path.join(ROOT, 'images', 'datasets', 'not');
+const NOT_DIR       = path.join(ROOT,  'datasets', 'not');
+const BOT_DIR       = path.join(ROOT,  'datasets', 'bot');
 const DATA_DIR      = path.join(ROOT, 'data');
 const MANIFEST_PATH = path.join(DATA_DIR, 'manifest.json');
 

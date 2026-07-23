@@ -337,3 +337,8 @@ tr:hover td { background: #fafafa; }
   .btn-bot, .btn-not { font-size: 1.1rem; padding: 0.85rem 1.5rem; }
   .stat-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* Text challenge content (in game.html inline styles) */
+@media (max-width: 480px) {
+  .text-content { font-size: 0.95rem; }
+}
