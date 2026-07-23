@@ -5,7 +5,7 @@
 node_modules/
 
 # ── Images (large dataset, manage locally) ───────────────────────
-images/
+datasets/
 
 # ── Runtime data (generated during events, not versioned) ────────
 data/
